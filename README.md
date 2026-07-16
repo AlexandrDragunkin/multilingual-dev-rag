@@ -10,7 +10,9 @@ Local-first multilingual RAG for code and technical docs. In-process hybrid retr
 
 Most local RAG setups pair a multilingual embedding model with a full-text index and call it hybrid search. That works — until your corpus is not in English.
 
-The embedded engine this is built on ([zvec](https://github.com/alibaba/zvec)) ships a `standard` tokenizer that **drops non-ASCII tokens entirely**, and a `lowercase` filter that **only folds ASCII**. The result is not an error. A query for `воркер` returns zero rows, a query for `RabbitMQ` returns rows, and the hybrid quietly degrades to vector-only for half your corpus. Nothing in the logs says so.
+The embedded engine this is built on ([zvec](https://github.com/alibaba/zvec)) ships a `standard` tokenizer that **drops non-ASCII tokens entirely** (on Windows and Linux — on macOS, curiously, it does not), and a `lowercase` filter that **only folds ASCII**. The result is not an error. A query for `воркер` returns zero rows, a query for `RabbitMQ` returns rows, and the hybrid quietly degrades to vector-only for half your corpus. Nothing in the logs says so.
+
+The platform split is the nastier half of the story. A package that relied on `standard` alone would *appear* to work on a developer's Mac and silently break the moment it shipped to a Linux server — same code, same engine, different tokenizer behaviour per OS. The fix below does not depend on which side of that split you are on: it works everywhere, and is merely redundant where `standard` already handles Cyrillic.
 
 ## How the fix works
 
@@ -18,9 +20,11 @@ Swapping the tokenizer does not save you. The engine ships exactly three, and ea
 
 | Tokenizer | Cyrillic | Identifiers | Punctuation |
 | --- | --- | --- | --- |
-| `standard` | **discards it** | splits correctly: `obj_k3_gab3` → `obj`, `k3`, `gab3` | separates correctly |
+| `standard` | **discards it**¹ | splits correctly: `obj_k3_gab3` → `obj`, `k3`, `gab3` | separates correctly |
 | `whitespace` | keeps it | **never splits** | **glues**: `RabbitMQ.` is one token |
 | `jieba` | **shreds it** | splits | separates |
+
+¹ On Windows and Linux. On macOS, `standard` *does* match Cyrillic — the only platform of the three where it does (verified across the CI matrix on zvec 0.5.1). The `text_fts` workaround below is therefore redundant on macOS but harmless: its lanes never double-count because Latin is excluded from `text_fts`.
 
 `jieba` looks like the answer right up until you measure it at scale: 7 of 9 correct on a five-document probe, pure noise on a real 837-chunk corpus — a query for the exact title word of one document returned three unrelated ones, a different wrong answer per letter case. Worse than `standard`, which at least stayed honestly silent.
 
@@ -52,12 +56,12 @@ Case folding happens in Python, not in the engine: `casefold()` handles `ß`/`SS
 | Platform | Wheel | Status |
 | --- | --- | --- |
 | Windows x86_64 | `win_amd64` | **tested** — this is where it was built |
-| Linux x86_64 / aarch64 | `manylinux_2_28` | should work — untested |
-| macOS Apple Silicon (11+) | `macosx_11_0_arm64` | should work — untested |
+| Linux x86_64 / aarch64 | `manylinux_2_28` | **tested** — CI green (Python 3.10–3.13) |
+| macOS Apple Silicon (11+) | `macosx_11_0_arm64` | **tested** — CI green (Python 3.10–3.13) |
 | macOS Intel | — | **will not install** |
 | Any 32-bit Python | — | **will not install** |
 
-"Should work — untested" means exactly that: the wheel exists and nothing in the code looks platform-bound, but nobody has run it there. Reports welcome.
+All three wheel-bearing platforms run the full suite in CI, including the seven integration tests that hit the live zvec engine.
 
 On a platform without a wheel, `pip install` fails with `from versions: none`. That message means *wrong platform*, not *missing package* — no amount of build tooling will help.
 

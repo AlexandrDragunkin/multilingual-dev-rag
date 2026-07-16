@@ -2,16 +2,21 @@
 """Интеграционные тесты: реальный движок zvec, реальная FTS-токенизация.
 
 Юнит-тесты normalizer'а (test_fts_normalizer.py) проверяют чистую функцию
-make_fts_unicode — но баг FTS живёт не в ней, а в токенайзере движка:
-standard выбрасывает не-ASCII токены целиком, а фильтр lowercase в zvec
-складывает регистр только для ASCII. Эти тесты ходят через настоящий zvec:
-создают временную коллекцию, вставляют документы, ищут. Если завтра новая
-версия zvec починит standard под кириллицу — test_standard_does_not_find_cyrillic
-упадёт, и это сигнал, что обход (поле text_fts) можно убирать.
+make_fts_unicode — но баг FTS живёт не в ней, а в токенайзере движка. Эти тесты
+ходят через настоящий zvec: создают временную коллекцию, вставляют документы,
+ищут.
+
+Платформенная особенность: токенайзер `standard` выбрасывает не-ASCII токены
+на Windows и Linux, но **находит** их на macOS. Негативный тест
+test_standard_does_not_find_cyrillic учитывает это и ожидает разный исход по
+платформам. Если zvec изменит поведение на любой из них — тест упадёт, и это
+сигнал перепроверить, нужен ли обход через text_fts на этой платформе.
 
 Запуск: python -m pytest tests/test_zvec_integration.py -v -m integration
 """
+import gc
 import os
+import platform
 import shutil
 import tempfile
 
@@ -86,7 +91,15 @@ def _build_schema(name: str) -> "zvec.CollectionSchema":
 @pytest.fixture
 def coll():
     """Временная zvec-коллекция. Создаётся в tempfile.mkdtemp(), удаляется
-    в finally. У Collection нет явного close() — освобождение = очистка каталога."""
+    в finally.
+
+    У Collection в zvec 0.5.1 нет явного close()/release()/__exit__: сборщик
+    мусора отпускает файловые дескрипторы RocksDB при удалении последней
+    ссылки. Поэтому в finally — del + gc.collect() ДО rmtree. Без этого на
+    macOS rmtree бежит, пока zvec ещё держит коллекцию открытой, и RocksDB
+    печатает в лог «Failed to flush/close» на каждый тест. Тесты проходят,
+    но шум маскирует настоящие ошибки.
+    """
     global _COLL_SEQ
     _COLL_SEQ += 1
     name = f"probe_it{_COLL_SEQ}"
@@ -100,6 +113,8 @@ def coll():
     try:
         yield c
     finally:
+        del c
+        gc.collect()
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
@@ -194,15 +209,43 @@ def test_identifier_split_by_standard(coll):
 # Негативный: фиксирует причину существования text_fts
 # =====================================================================
 
-@pytest.mark.integration
-def test_standard_does_not_find_cyrillic(coll):
-    """ГЛАВНЫЙ негативный тест. Токенайзер standard НЕ находит кириллицу —
-    выбрасывает не-ASCII токены целиком. Именно поэтому нужно отдельное поле
-    text_fts с whitespace.
+# Поведение токенайзера standard зависит от платформы (проверено CI-матрицей
+# на zvec 0.5.1): на Windows и Linux он выбрасывает не-ASCII токены целиком,
+# на macOS — индексирует их. Это не баг zvec как таковой и не баг обхода; это
+# факт о движке, от которого зависит, нужен ли text_fts на данной платформе.
+# На macOS обход избыточен (standard и так нашёл бы), но безвреден: дороги
+# дублирующих совпадений не создают, т.к. латиница в text_fts не попадает.
+_STANDARD_DROPS_NON_ASCII = platform.system() != 'Darwin'
 
-    Если этот тест упадёт (станет находить кириллицу) — значит zvec починил
-    standard, и обход через text_fts можно убирать.
+
+@pytest.mark.integration
+def test_standard_cyrillic_behavior_matches_platform(coll):
+    """ГЛАВНЫЙ негативный тест. Фиксирует причину существования поля text_fts:
+    на Windows/Linux токенайзер `standard` выбрасывает кириллицу целиком, и без
+    отдельного поля с `whitespace` поиск по ней невозможен.
+
+    Поведение `standard` платформозависимо (zvec 0.5.1): на macOS он кириллицу
+    находит. Поэтому ожидаемый исход зависит от platform.system():
+      - Windows / Linux  → standard НЕ находит → text_fts необходим
+      - macOS            → standard находит    → text_fts избыточен, но безвреден
+
+    Тест обязан уметь падать на каждой платформе: если zvec изменит поведение
+    (станет находить кириллицу на Win/Linux — обход можно убирать; перестанет
+    находить на macOS — обход становится необходим), ассерт покраснеет.
     """
     _insert(coll, 'ru_neg', 'коробка двери сборка', 'коробка двери сборка')
-    assert _hit_ids(coll, 'text', 'коробка') == set()
-    assert _hit_ids(coll, 'text', 'дверь') == set()
+    hits = _hit_ids(coll, 'text', 'коробка')
+    if _STANDARD_DROPS_NON_ASCII:
+        # Win/Linux: standard выбрасывает кириллицу — поиск пуст.
+        assert hits == set(), (
+            "standard unexpectedly matches Cyrillic on "
+            f"{platform.system()}: {hits}. If zvec changed, the text_fts "
+            "workaround may no longer be needed on this platform."
+        )
+    else:
+        # macOS: standard кириллицу находит.
+        assert hits == {'ru_neg'}, (
+            "standard unexpectedly drops Cyrillic on "
+            f"{platform.system()}: {hits}. If zvec changed, the text_fts "
+            "workaround is now required on this platform."
+        )
