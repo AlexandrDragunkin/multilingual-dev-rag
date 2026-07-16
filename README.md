@@ -2,6 +2,20 @@
 
 Local-first multilingual RAG for code and technical docs. In-process hybrid retrieval (vector + full-text) with FTS for Cyrillic and other non-ASCII scripts.
 
+[![CI](https://github.com/AlexandrDragunkin/multilingual-dev-rag/actions/workflows/tests.yml/badge.svg)](https://github.com/AlexandrDragunkin/multilingual-dev-rag/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/multilingual-dev-rag?label=PyPI)](https://pypi.org/project/multilingual-dev-rag/)
+[![Python](https://img.shields.io/pypi/pyversions/multilingual-dev-rag)](https://pypi.org/project/multilingual-dev-rag/)
+[![License](https://img.shields.io/pypi/l/multilingual-dev-rag)](LICENSE)
+
+> **Pre-release.** The current version is `0.1.0rc1` — a release candidate. Install it with either:
+>
+> ```bash
+> pip install --pre multilingual-dev-rag        # allow pre-releases
+> pip install multilingual-dev-rag==0.1.0rc1    # or pin the exact version
+> ```
+>
+> Plain `pip install multilingual-dev-rag` will not pick it up: pip skips pre-releases by default. That is intentional — a pre-release can be superseded or retracted; a final `0.1.0` cannot.
+
 [Русская версия](README_RU.md) · Apache-2.0
 
 ---
