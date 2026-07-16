@@ -10,7 +10,7 @@ to a profile describing which files count. See `dev_rag.config`.
 from .config import DEV_RAG_PROFILE, DEV_RAG_ROOT, RAG_BACKEND
 from .searcher import search
 
-__version__ = '0.1.0'
+__version__ = '0.1.0rc1'
 
 __all__ = [
     'search',

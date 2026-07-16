@@ -1,0 +1,55 @@
+name: tests
+
+# Гоняем на трёх ОС не для галочки: пакет разрабатывался на Windows, а вилки
+# zvec есть под Linux и macOS — до этой матрицы их никто не проверял, и README
+# честно писал «should work — untested». Здесь это перестаёт быть догадкой.
+#
+# Отдельно важен Linux: glob там регистрозависим, а на Windows — нет. Профиль,
+# перечисляющий только *.mac, на Windows находил все файлы и молча терял бы
+# четверть на Linux. Такие расхождения ловятся только реальным запуском.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Show what we are actually running on
+        # Разрядность и платформа — первое, что стоит знать при разборе падения:
+        # zvec ставится только на 64 бита, и «from versions: none» означает
+        # именно это, а не отсутствие пакета.
+        run: |
+          python -c "import sys, platform, struct; print('Python', sys.version); print('bits', struct.calcsize('P')*8); print('platform', platform.platform()); import zvec; print('zvec', zvec.__version__)"
+
+      - name: Unit tests
+        run: pytest tests/ -v -m "not integration"
+
+      - name: Integration tests (real zvec engine)
+        # Эти тесты и есть смысл матрицы: они бьют в настоящий движок, а баги
+        # с не-ASCII жили именно в нём, а не в нашем нормализаторе.
+        run: pytest tests/ -v -m integration

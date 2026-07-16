@@ -1,0 +1,82 @@
+name: publish
+
+# Trusted Publishing: PyPI доверяет этому workflow по OIDC, API-токена нет
+# нигде — ни в секретах репозитория, ни на диске. Требует однократной настройки
+# на стороне PyPI (Publishing -> Add a new pending publisher):
+#
+#   PyPI Project Name:  multilingual-dev-rag
+#   Owner:              AlexandrDragunkin
+#   Repository name:    multilingual-dev-rag
+#   Workflow name:      publish.yml
+#   Environment name:   pypi
+#
+# Публикация — по тегу. Номер версии берётся из pyproject.toml, а не из тега:
+# тег лишь запускает процесс. Следите, чтобы они совпадали — job ниже это
+# проверяет и падает при расхождении.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Build
+        run: python -m build
+
+      - name: Check metadata
+        run: python -m twine check dist/*
+
+      - name: Tag must match the version in pyproject
+        # Иначе легко выпустить 0.1.0 под тегом v0.2.0 и потом гадать, что
+        # именно лежит на PyPI. Номер версии на PyPI не переиспользуется —
+        # ошибка здесь не откатывается, только новым номером.
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKG=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          echo "tag=$TAG  pyproject=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match pyproject version $PKG"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    # Environment даёт возможность повесить ручное подтверждение на релиз
+    # (Settings -> Environments -> pypi -> Required reviewers) и то же имя
+    # указывается в pending publisher на PyPI.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/multilingual-dev-rag
+
+    permissions:
+      # Единственное, что нужно для Trusted Publishing. Без токенов.
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

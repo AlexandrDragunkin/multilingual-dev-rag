@@ -14,6 +14,26 @@ def test_import_search():
     assert callable(search)
 
 
+def test_version_matches_pyproject():
+    """__version__ и version в pyproject не должны разъезжаться.
+
+    Номер живёт в двух местах, и рассинхрон ничем себя не проявит: пакет
+    соберётся, установится и будет врать о своей версии. На PyPI номер
+    переиспользовать нельзя, так что ошибка здесь не откатывается.
+    """
+    import pathlib
+    import re
+
+    import dev_rag
+
+    pyproject = pathlib.Path(__file__).parent.parent / 'pyproject.toml'
+    if not pyproject.is_file():          # установлен из wheel, исходников нет
+        pytest.skip('pyproject.toml not available (installed package)')
+    m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(encoding='utf-8'), re.M)
+    assert m, 'version not found in pyproject.toml'
+    assert dev_rag.__version__ == m.group(1)
+
+
 def test_config_defaults():
     """Config загружается с дефолтами."""
     from dev_rag.config import RAG_BACKEND, COLLECTIONS
