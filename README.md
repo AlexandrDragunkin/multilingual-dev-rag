@@ -47,7 +47,7 @@ Case folding happens in Python, not in the engine: `casefold()` handles `ß`/`SS
 
 ## Requirements
 
-- **64-bit Python 3.10–3.14.** zvec ships no 32-bit wheels; on a 32-bit interpreter `pip install` fails with `from versions: none`, which means *wrong platform*, not *missing package*.
+- **64-bit Python 3.10–3.14.** zvec ships wheels for Linux (`manylinux_2_28`, x86_64 and aarch64), macOS (arm64) and Windows (amd64) — 64-bit only. On a 32-bit interpreter `pip install` fails with `from versions: none`, which means *wrong platform*, not *missing package*.
 - ~500 MB of disk for the embedding model on first run.
 
 ## Install
@@ -103,7 +103,7 @@ for r in search('усталость воркера', collection='docs', n=5):
     "dev-rag": {
       "command": "dev-rag-mcp",
       "env": {
-        "DEV_RAG_ROOT": "/path/to/your/repo",
+        "DEV_RAG_ROOT": "/absolute/path/to/your/repo",
         "DEV_RAG_PROFILE": "generic"
       }
     }

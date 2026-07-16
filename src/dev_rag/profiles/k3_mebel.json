@@ -1,6 +1,6 @@
 {
   "name": "k3_mebel",
-  "description": "K3-Мебель CAD project: Python prototypes, .mac macros, API docs and plans. Serves as a worked example of a hand-tuned profile.",
+  "description": "K3-Мебель CAD project: Python prototypes, .mac macros, API docs and plans. A worked example of a hand-tuned profile. Note the *.mac and *.MAC pairs: glob is case-insensitive on Windows and case-sensitive on Linux, so listing only *.mac would silently drop 351 of 1368 macros on Linux while looking fine on Windows. Duplicates are de-duplicated by the indexer.",
   "collections": {
     "docs": "k3_docs",
     "code": "k3_code",
@@ -21,7 +21,9 @@
       "Proto/based_build/Accessory.py",
       "Proto/core_k/objgab.py",
       "Proto/**/*.mac",
-      "K3Files/**/*.mac"
+      "Proto/**/*.MAC",
+      "K3Files/**/*.mac",
+      "K3Files/**/*.MAC"
     ],
     "plans": [
       "plans/*.md"
