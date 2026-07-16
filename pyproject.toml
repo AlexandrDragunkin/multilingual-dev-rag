@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multilingual-dev-rag"
+version = "0.1.0"
+description = "Local-first multilingual RAG for code and technical docs. In-process hybrid retrieval (vector + full-text) with FTS for Cyrillic and other non-ASCII scripts."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{name = "Aleksandr Dragunkin"}]
+keywords = [
+    "rag",
+    "vector-search",
+    "full-text-search",
+    "hybrid-search",
+    "multilingual",
+    "cyrillic",
+    "code-search",
+    "zvec",
+    "local-first",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Text Processing :: Indexing",
+    "Natural Language :: Russian",
+    "Natural Language :: English",
+]
+
+dependencies = [
+    # zvec backend — in-process, no servers. 64-bit Python only.
+    "zvec>=0.5.1",
+    "sentence-transformers>=2.0",
+]
+
+[project.optional-dependencies]
+# Legacy backend: needs a running Qdrant server and an Ollama embedder.
+qdrant = ["qdrant-client>=1.7", "httpx>=0.24"]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[project.urls]
+Homepage = "https://github.com/AlexandrDragunkin/multilingual-dev-rag"
+Repository = "https://github.com/AlexandrDragunkin/multilingual-dev-rag"
+Issues = "https://github.com/AlexandrDragunkin/multilingual-dev-rag/issues"
+
+[project.scripts]
+dev-rag-index = "dev_rag.cli:main"
+dev-rag-mcp = "dev_rag.mcp_server:main"
+dev-rag-search = "dev_rag.cli:search_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dev_rag = ["profiles/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests hitting the real zvec engine (create temp collections, slower)",
+]

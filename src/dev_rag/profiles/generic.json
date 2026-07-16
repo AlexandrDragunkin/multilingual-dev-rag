@@ -1,0 +1,20 @@
+{
+  "name": "generic",
+  "description": "Sensible defaults: markdown docs anywhere, Python sources anywhere.",
+  "collections": {
+    "docs": "dev_rag_docs",
+    "code": "dev_rag_code",
+    "plans": "dev_rag_plans"
+  },
+  "index_patterns": {
+    "docs": [
+      "**/*.md",
+      "**/*.rst",
+      "**/*.txt"
+    ],
+    "code": [
+      "**/*.py"
+    ],
+    "plans": []
+  }
+}

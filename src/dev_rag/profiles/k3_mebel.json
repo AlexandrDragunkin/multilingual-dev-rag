@@ -1,0 +1,30 @@
+{
+  "name": "k3_mebel",
+  "description": "K3-Мебель CAD project: Python prototypes, .mac macros, API docs and plans. Serves as a worked example of a hand-tuned profile.",
+  "collections": {
+    "docs": "k3_docs",
+    "code": "k3_code",
+    "plans": "k3_plans"
+  },
+  "index_patterns": {
+    "docs": [
+      "odocs/**/*.md",
+      "Proto/DOOR_SYBERIA/manualsAndDocs/**/*.md",
+      "archi_system_cloude/**/*.md"
+    ],
+    "code": [
+      "Proto/DOOR_SYBERIA/**/*.py",
+      "Proto/mProfile/common.py",
+      "Proto/mProfile/example/*.py",
+      "Proto/engine/FurnObject.py",
+      "Proto/engine/uFurnObject.py",
+      "Proto/based_build/Accessory.py",
+      "Proto/core_k/objgab.py",
+      "Proto/**/*.mac",
+      "K3Files/**/*.mac"
+    ],
+    "plans": [
+      "plans/*.md"
+    ]
+  }
+}
