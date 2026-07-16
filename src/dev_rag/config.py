@@ -22,6 +22,7 @@ profile, edit the globs, and point `DEV_RAG_PROFILE` at the file.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -88,10 +89,39 @@ INDEX_PATTERNS = _profile['index_patterns']
 RAG_BACKEND = os.getenv('RAG_BACKEND', 'zvec')
 
 # ==================== zvec backend ====================
-# Index lives inside the package by default: it is derived data, rebuilt by
-# `dev-rag-index`, and must never be committed (see .gitignore) — it contains
-# chunks of the indexed corpus.
-ZVEC_DB_PATH = os.getenv('ZVEC_DB_PATH', os.path.join(_PACKAGE_DIR, 'zvec_data'))
+
+def _default_db_path() -> str:
+    """Where the index lives: a per-user, per-corpus directory.
+
+    Not inside the package. The index is derived data — rebuilt by
+    `dev-rag-index`, and holding chunks of whatever corpus you pointed at.
+    Writing it into `site-packages/` works for an editable install and breaks
+    for a normal one: on Linux that directory belongs to root.
+
+    Keyed by the corpus root, so one installation can serve several
+    repositories. With a single shared path, pointing DEV_RAG_ROOT at another
+    repository and re-indexing would silently overwrite the previous index —
+    and a search would then answer confidently from the wrong corpus.
+
+    The directory name keeps the root's basename for readability and a short
+    hash of its absolute path for uniqueness. Override wholesale with
+    ZVEC_DB_PATH if you want the index somewhere specific.
+    """
+    if os.name == 'nt':
+        base = os.environ.get('LOCALAPPDATA') or os.path.join(
+            os.path.expanduser('~'), 'AppData', 'Local'
+        )
+    else:
+        base = os.environ.get('XDG_DATA_HOME') or os.path.join(
+            os.path.expanduser('~'), '.local', 'share'
+        )
+    root = os.path.abspath(DEV_RAG_ROOT) if DEV_RAG_ROOT else '_unset'
+    slug = os.path.basename(root.rstrip(os.sep)) or 'root'
+    digest = hashlib.md5(root.encode('utf-8')).hexdigest()[:8]
+    return os.path.join(base, 'dev-rag', f'{slug}-{digest}', 'zvec_data')
+
+
+ZVEC_DB_PATH = os.getenv('ZVEC_DB_PATH') or _default_db_path()
 ZVEC_MODEL = os.getenv('ZVEC_MODEL', 'paraphrase-multilingual-MiniLM-L12-v2')
 ZVEC_EMBED_DIM = 384  # paraphrase-multilingual-MiniLM-L12-v2 output dimension
 

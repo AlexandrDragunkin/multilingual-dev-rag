@@ -75,6 +75,66 @@ def test_unknown_profile_lists_available():
         load_profile('no_such_profile')
 
 
+class TestIndexLocation:
+    """Индекс — производные данные, и живёт он не в каталоге кода."""
+
+    def test_index_not_inside_package(self, monkeypatch, tmp_path):
+        """Писать в site-packages нельзя: на Linux этот каталог принадлежит root."""
+        import importlib
+        import dev_rag.config
+        monkeypatch.setenv('DEV_RAG_ROOT', str(tmp_path))
+        monkeypatch.delenv('ZVEC_DB_PATH', raising=False)
+        importlib.reload(dev_rag.config)
+        pkg_dir = os.path.dirname(os.path.abspath(dev_rag.config.__file__))
+        assert not dev_rag.config.ZVEC_DB_PATH.startswith(pkg_dir)
+
+    def test_different_roots_get_different_indexes(self, monkeypatch, tmp_path):
+        """Иначе смена DEV_RAG_ROOT молча затирает индекс прошлого корпуса,
+        и поиск начинает уверенно отвечать не из того репозитория."""
+        import importlib
+        import dev_rag.config
+        monkeypatch.delenv('ZVEC_DB_PATH', raising=False)
+        paths = []
+        for name in ('repo_one', 'repo_two'):
+            root = tmp_path / name
+            root.mkdir()
+            monkeypatch.setenv('DEV_RAG_ROOT', str(root))
+            importlib.reload(dev_rag.config)
+            paths.append(dev_rag.config.ZVEC_DB_PATH)
+        assert paths[0] != paths[1]
+
+    def test_same_root_is_stable(self, monkeypatch, tmp_path):
+        """Один корень — один и тот же путь между запусками."""
+        import importlib
+        import dev_rag.config
+        monkeypatch.delenv('ZVEC_DB_PATH', raising=False)
+        monkeypatch.setenv('DEV_RAG_ROOT', str(tmp_path))
+        importlib.reload(dev_rag.config)
+        first = dev_rag.config.ZVEC_DB_PATH
+        importlib.reload(dev_rag.config)
+        assert dev_rag.config.ZVEC_DB_PATH == first
+
+    def test_path_keeps_readable_slug(self, monkeypatch, tmp_path):
+        """В пути должно быть видно, какой это корпус, а не только хэш."""
+        import importlib
+        import dev_rag.config
+        root = tmp_path / 'my_project'
+        root.mkdir()
+        monkeypatch.delenv('ZVEC_DB_PATH', raising=False)
+        monkeypatch.setenv('DEV_RAG_ROOT', str(root))
+        importlib.reload(dev_rag.config)
+        assert 'my_project-' in dev_rag.config.ZVEC_DB_PATH
+
+    def test_env_override_wins(self, monkeypatch, tmp_path):
+        """ZVEC_DB_PATH перекрывает вычисленный путь целиком."""
+        import importlib
+        import dev_rag.config
+        monkeypatch.setenv('DEV_RAG_ROOT', str(tmp_path))
+        monkeypatch.setenv('ZVEC_DB_PATH', str(tmp_path / 'custom'))
+        importlib.reload(dev_rag.config)
+        assert dev_rag.config.ZVEC_DB_PATH == str(tmp_path / 'custom')
+
+
 def test_chunker_md():
     """Chunker разбивает markdown по заголовкам."""
     from dev_rag.chunker import chunk_text

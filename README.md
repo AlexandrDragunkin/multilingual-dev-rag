@@ -75,6 +75,21 @@ export DEV_RAG_PROFILE=generic
 
 Two guards replace that guess. A missing root, or one that is not a directory, raises before anything runs. A root that exists but matches no file under the profile's patterns makes `dev-rag-index` **exit 2** with both values printed — an empty index built "successfully" looks healthy right up until a search returns nothing and also says nothing.
 
+### Where the index lives
+
+Per user, per corpus — never inside the package:
+
+```
+Linux/macOS   ${XDG_DATA_HOME:-~/.local/share}/dev-rag/<repo>-<hash>/zvec_data
+Windows       %LOCALAPPDATA%\dev-rag\<repo>-<hash>\zvec_data
+```
+
+The `<hash>` is derived from the corpus root's absolute path, so **one installation serves several repositories** without them colliding. Point `DEV_RAG_ROOT` somewhere else and you get a separate index, not an overwritten one — otherwise a search would answer confidently from the wrong corpus.
+
+Set `ZVEC_DB_PATH` to override the location entirely.
+
+The index is derived data: it holds chunks of whatever you indexed, it is rebuilt by `dev-rag-index`, and it does not belong in version control.
+
 ## Use
 
 ```bash
