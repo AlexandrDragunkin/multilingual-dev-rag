@@ -63,7 +63,7 @@ On a platform without a wheel, `pip install` fails with `from versions: none`. T
 
 Other requirements:
 
-- ~500 MB of disk for the embedding model on first run.
+- **457 MB** of disk for the embedding model, downloaded on first index into `~/.cache/huggingface/`. Shared across projects; separate from the index.
 - On macOS the index goes to `~/.local/share/dev-rag/` (the XDG path), not `~/Library/Application Support`. Set `ZVEC_DB_PATH` if you want the native location.
 
 ## Install
@@ -109,7 +109,7 @@ The index is derived data: it holds chunks of whatever you indexed, it is rebuil
 ## Use
 
 ```bash
-# Index the corpus (first run also downloads the model)
+# Index the whole corpus
 dev-rag-index --category all --force
 
 # Index one collection
@@ -118,6 +118,15 @@ dev-rag-index --category docs --force
 # Search from the shell
 dev-rag-search "ферма воркеров" --collection docs
 ```
+
+> **The first run is slower than the rest.** The embedding model is not bundled:
+> `sentence-transformers` fetches it from Hugging Face on first use — 457 MB into
+> `~/.cache/huggingface/hub/` (on Windows, `C:\Users\<you>\.cache\huggingface\hub\`).
+> That is **not** where the index lives: the model is shared across projects, the
+> index is per corpus. Later runs load it from cache.
+>
+> For an offline environment, copy the cache from a machine where it is already
+> warm, or point `HF_HOME` somewhere prepared.
 
 ```python
 from dev_rag import search
