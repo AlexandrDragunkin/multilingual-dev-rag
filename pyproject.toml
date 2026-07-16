@@ -1,5 +1,9 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
+# >=77, не 64: license = "Apache-2.0" как SPDX-строка и license-files в
+# [project] — это PEP 639, и до 77 setuptools их не понимает. С build-isolation
+# pip ставит свежий setuptools и всё собирается, поэтому расхождение не видно;
+# сборка с --no-build-isolation на setuptools 64-76 упала бы на метаданных.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
