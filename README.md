@@ -47,8 +47,24 @@ Case folding happens in Python, not in the engine: `casefold()` handles `ß`/`SS
 
 ## Requirements
 
-- **64-bit Python 3.10–3.14.** zvec ships wheels for Linux (`manylinux_2_28`, x86_64 and aarch64), macOS (arm64) and Windows (amd64) — 64-bit only. On a 32-bit interpreter `pip install` fails with `from versions: none`, which means *wrong platform*, not *missing package*.
+**Python 3.10–3.14, 64-bit.** Everything else follows from zvec's wheels — it ships **no sdist**, so if there is no wheel for your platform there is no fallback to building from source.
+
+| Platform | Wheel | Status |
+| --- | --- | --- |
+| Windows x86_64 | `win_amd64` | **tested** — this is where it was built |
+| Linux x86_64 / aarch64 | `manylinux_2_28` | should work — untested |
+| macOS Apple Silicon (11+) | `macosx_11_0_arm64` | should work — untested |
+| macOS Intel | — | **will not install** |
+| Any 32-bit Python | — | **will not install** |
+
+"Should work — untested" means exactly that: the wheel exists and nothing in the code looks platform-bound, but nobody has run it there. Reports welcome.
+
+On a platform without a wheel, `pip install` fails with `from versions: none`. That message means *wrong platform*, not *missing package* — no amount of build tooling will help.
+
+Other requirements:
+
 - ~500 MB of disk for the embedding model on first run.
+- On macOS the index goes to `~/.local/share/dev-rag/` (the XDG path), not `~/Library/Application Support`. Set `ZVEC_DB_PATH` if you want the native location.
 
 ## Install
 
@@ -79,7 +95,7 @@ Two guards replace that guess. A missing root, or one that is not a directory, r
 
 Per user, per corpus — never inside the package:
 
-```
+```text
 Linux/macOS   ${XDG_DATA_HOME:-~/.local/share}/dev-rag/<repo>-<hash>/zvec_data
 Windows       %LOCALAPPDATA%\dev-rag\<repo>-<hash>\zvec_data
 ```
