@@ -40,6 +40,26 @@ from .fts_normalizer import has_ascii_word, has_non_ascii, make_fts_unicode
 _embedder = None
 _collections: dict = {}  # category -> Collection
 
+# Диагностика последнего search(): почему часть категорий не попала в выдачу
+# (эксклюзивный lock, битый индекс). Контракт search() -> list общий с
+# qdrant/CLI/тестами, поэтому «почему пусто» не втискивается в результаты, а
+# публикуется отдельным каналом. mcp_server выносит это в тело MCP-ответа;
+# CLI и qdrant-бэкенд канал игнорируют.
+_last_diagnostics: list = []
+
+
+def get_last_diagnostics() -> list:
+    """Сообщения последнего search(): недоступные категории и причина.
+
+    Пустой список — все запрошенные категории открылись. Канал отдельный от
+    результатов сознательно: менять сигнатуру search() ради диагностики MCP
+    значит трогать четырёх потребителей (qdrant, CLI, MCP, тесты) ради одного.
+    Читатель (mcp_server) опрашивает канал сразу после search() в том же
+    процессе; поиск синхронный и однопоточный, поэтому глобальная переменная
+    безопасна.
+    """
+    return list(_last_diagnostics)
+
 
 def _get_embedder():
     """Lazy-load sentence-transformers (первый вызов ~50с, затем мгновенно)."""
@@ -135,6 +155,10 @@ def _get_collection(category: str) -> Optional[Collection]:
             # что CLI и MCP-клиент видят её в любом случае. Возвращаем None,
             # а не пробрасываем: прочие категории могут открыться нормально.
             _log.warning('zvec open failed for %r: %s', category, e)
+            # Дублируем причину в диагностический канал (get_last_diagnostics):
+            # stderr видит человек в консоли, но не MCP-клиент. Дефект 2 —
+            # «лучший» вариант: причина попадает в тело ответа ассистента.
+            _last_diagnostics.append(f'Категория {category!r} недоступна: {e}')
             return None
     return _collections[category]
 
@@ -150,6 +174,9 @@ def search(query: str, collection: str = 'all', n: int = 5) -> list:
     Returns:
         Список словарей: {'score', 'path', 'context', 'text'}.
     """
+    # Диагностика относится к текущему вызову — сбрасываем прошлую, чтобы
+    # mcp_server не показал причину от предыдущего поиска.
+    _last_diagnostics.clear()
     categories = list(COLLECTIONS.keys()) if collection == 'all' else [collection]
     query_vec = _embed(query)
     results = []

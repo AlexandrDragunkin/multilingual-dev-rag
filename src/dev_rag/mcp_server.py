@@ -11,7 +11,7 @@ import sys
 import traceback
 
 from . import __version__
-from .searcher import search
+from .searcher import get_last_diagnostics, search
 
 TOOLS = [
     {
@@ -70,7 +70,18 @@ def _format_results(results: list, n_results: int) -> str:
 def rag_search(query: str, collection: str = 'all', n_results: int = 5) -> str:
     """Выполнить поиск через роутер (zvec или qdrant)."""
     results = search(query, collection=collection, n=n_results)
-    return _format_results(results, n_results)
+    body = _format_results(results, n_results)
+    # Дефект 2 («лучший» вариант): если часть категорий не открылась
+    # (эксклюзивный lock, битый индекс), search() молча их пропускает, и
+    # результат неотличим от пустого корпуса — тихий отказ. Причина уходила
+    # только в stderr, которого MCP-клиент не видит. Выносим её в тело ответа,
+    # чтобы ассистент понимал: пусто из-за недоступного индекса, а не из-за
+    # отсутствия совпадений.
+    diagnostics = get_last_diagnostics()
+    if diagnostics:
+        note = '\n'.join(f'⚠ {d}' for d in diagnostics)
+        body = f'{body}\n\n--- Диагностика индекса ---\n{note}'
+    return body
 
 
 def handle(request: dict) -> dict | None:
