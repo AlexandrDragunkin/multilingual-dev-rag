@@ -66,7 +66,7 @@ Case folding happens in Python, not in the engine: `casefold()` handles `ß`/`SS
 
 ## Requirements
 
-**Python 3.10–3.14, 64-bit.** Everything else follows from zvec's wheels — it ships **no sdist**, so if there is no wheel for your platform there is no fallback to building from source.
+**Python 3.10–3.13, 64-bit.** Everything else follows from zvec's wheels — it ships **no sdist**, so if there is no wheel for your platform there is no fallback to building from source.
 
 | Platform | Wheel | Status |
 | --- | --- | --- |
@@ -76,9 +76,11 @@ Case folding happens in Python, not in the engine: `casefold()` handles `ß`/`SS
 | macOS Intel | — | **will not install** |
 | Any 32-bit Python | — | **will not install** |
 
-All three wheel-bearing platforms run the full suite in CI, including the seven integration tests that hit the live zvec engine.
+All three wheel-bearing platforms run the full suite in CI, including the eight integration tests that hit the live zvec engine.
 
 On a platform without a wheel, `pip install` fails with `from versions: none`. That message means *wrong platform*, not *missing package* — no amount of build tooling will help.
+
+**3.14 is untested, not unsupported.** zvec publishes cp314 wheels and this may well work there, but CI does not run it, so nothing here verifies the claim. `requires-python = ">=3.10"` has no upper bound, so pip *will* install on 3.14 — you are the first to find out.
 
 Other requirements:
 
