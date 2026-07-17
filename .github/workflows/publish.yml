@@ -32,6 +32,19 @@ jobs:
       - name: Install build tooling
         run: python -m pip install --upgrade pip build twine
 
+      - name: Install the package and run its tests
+        # Публикация не должна зависеть от того, посмотрел ли человек на
+        # зелёную галочку перед тем, как поставить тег. Workflow tests.yml
+        # ходит по push в main и о теге ничего не знает: без этого шага тег на
+        # сломанном коммите уехал бы в PyPI, а номер версии оттуда не
+        # отзывается — только новый.
+        #
+        # Матрицу здесь не гоняем: три ОS x четыре Python уже прошли на этом
+        # коммите в tests.yml. Здесь нужен последний заслон, а не повтор.
+        run: |
+          pip install -e ".[dev]"
+          pytest tests/ -q
+
       - name: Build
         run: python -m build
 
