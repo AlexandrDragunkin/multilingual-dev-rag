@@ -19,6 +19,12 @@ pip install multilingual-dev-rag
 
 Most local RAG setups pair a multilingual embedding model with a full-text index and call it hybrid search. That works — until your corpus is not in English.
 
+> **FTS** — full-text search: the lexical half of the hybrid. It matches literal
+> words rather than meaning, which is what finds `RabbitMQ` or `obj_k3_gab3`
+> when a vector search only knows they *feel* like infrastructure and code.
+> Text is split into tokens by a **tokenizer**, and the whole problem below is
+> that the tokenizer decides which words exist at all.
+
 The embedded engine this is built on ([zvec](https://github.com/alibaba/zvec)) ships a `standard` tokenizer that **drops non-ASCII tokens entirely** (on Windows and Linux — on macOS, curiously, it does not), and a `lowercase` filter that **only folds ASCII**. The result is not an error. A query for `воркер` returns zero rows, a query for `RabbitMQ` returns rows, and the hybrid quietly degrades to vector-only for half your corpus. Nothing in the logs says so.
 
 The platform split is the nastier half of the story. A package that relied on `standard` alone would *appear* to work on a developer's Mac and silently break the moment it shipped to a Linux server — same code, same engine, different tokenizer behaviour per OS. The fix below does not depend on which side of that split you are on: it works everywhere, and is merely redundant where `standard` already handles Cyrillic.
