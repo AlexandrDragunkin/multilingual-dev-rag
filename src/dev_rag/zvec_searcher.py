@@ -6,10 +6,13 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Optional
 
 import zvec
+
+_log = logging.getLogger(__name__)
 
 # Движок нужно инициализировать перед любыми операциями, иначе FTS тихо
 # возвращает 0 результатов. Guard от двойного init (indexer + searcher).
@@ -37,6 +40,26 @@ from .fts_normalizer import has_ascii_word, has_non_ascii, make_fts_unicode
 _embedder = None
 _collections: dict = {}  # category -> Collection
 
+# Диагностика последнего search(): почему часть категорий не попала в выдачу
+# (эксклюзивный lock, битый индекс). Контракт search() -> list общий с
+# qdrant/CLI/тестами, поэтому «почему пусто» не втискивается в результаты, а
+# публикуется отдельным каналом. mcp_server выносит это в тело MCP-ответа;
+# CLI и qdrant-бэкенд канал игнорируют.
+_last_diagnostics: list = []
+
+
+def get_last_diagnostics() -> list:
+    """Сообщения последнего search(): недоступные категории и причина.
+
+    Пустой список — все запрошенные категории открылись. Канал отдельный от
+    результатов сознательно: менять сигнатуру search() ради диагностики MCP
+    значит трогать четырёх потребителей (qdrant, CLI, MCP, тесты) ради одного.
+    Читатель (mcp_server) опрашивает канал сразу после search() в том же
+    процессе; поиск синхронный и однопоточный, поэтому глобальная переменная
+    безопасна.
+    """
+    return list(_last_diagnostics)
+
 
 def _get_embedder():
     """Lazy-load sentence-transformers (первый вызов ~50с, затем мгновенно)."""
@@ -53,10 +76,27 @@ def _embed(text: str) -> list:
 
 
 def _open_or_create_collection(category: str) -> Collection:
-    """Открыть существующую zvec-коллекцию или создать новую."""
+    """Открыть существующую zvec-коллекцию или создать новую.
+
+    Существующая коллекция открывается как read-only. zvec берёт
+    эксклюзивный LOCK на read-write коллекцию (…/zvec_data/<cat>/LOCK), и
+    второй процесс — второй MCP-клиент, CLI рядом с открытым клиентом —
+    получал RuntimeError: Can't lock read-write collection и тихо отдавал
+    «No results found» (см. _get_collection). Read-only LOCK разделяемое:
+    два поиска сосуществуют, приёмки 3-4 plan 001 выполняются.
+
+    Проверено на zvec 0.5.1 (tests/test_zvec_integration.py): RO-хэндл
+    отвечает на query(), два RO-хэндла открыты одновременно. RO НЕ делит
+    LOCK с удерживаемым RW — поэтому «искать, пока индексатор пишет» не
+    покрывается; но это и не требуется: все клиенты поиска — RO, запись
+    осталась прерогативой индексатора (zvec_indexer, read_only=False).
+    """
     coll_path = os.path.join(ZVEC_DB_PATH, category)
     if os.path.exists(coll_path):
-        return zvec.open(coll_path)
+        return zvec.open(
+            coll_path,
+            option=CollectionOption(read_only=True, enable_mmap=True),
+        )
 
     schema = zvec.CollectionSchema(
         name=category,
@@ -105,7 +145,20 @@ def _get_collection(category: str) -> Optional[Collection]:
     if category not in _collections:
         try:
             _collections[category] = _open_or_create_collection(category)
-        except Exception:
+        except Exception as e:
+            # Раньше здесь было голое `return None`: любая ошибка открытия
+            # (включая эксклюзивный read-write lock из дефекта 1) превращалась
+            # в пустой ответ, неотличимый от пустого корпуса. Это тот же класс
+            # бага, что описан в config.py («0 chunks и exit 0»): тихий отказ
+            # выглядит как рабочий ответ. Теперь причина пишется в лог — без
+            # настройки логгера она идёт в stderr через logging lastResort, так
+            # что CLI и MCP-клиент видят её в любом случае. Возвращаем None,
+            # а не пробрасываем: прочие категории могут открыться нормально.
+            _log.warning('zvec open failed for %r: %s', category, e)
+            # Дублируем причину в диагностический канал (get_last_diagnostics):
+            # stderr видит человек в консоли, но не MCP-клиент. Дефект 2 —
+            # «лучший» вариант: причина попадает в тело ответа ассистента.
+            _last_diagnostics.append(f'Категория {category!r} недоступна: {e}')
             return None
     return _collections[category]
 
@@ -121,6 +174,9 @@ def search(query: str, collection: str = 'all', n: int = 5) -> list:
     Returns:
         Список словарей: {'score', 'path', 'context', 'text'}.
     """
+    # Диагностика относится к текущему вызову — сбрасываем прошлую, чтобы
+    # mcp_server не показал причину от предыдущего поиска.
+    _last_diagnostics.clear()
     categories = list(COLLECTIONS.keys()) if collection == 'all' else [collection]
     query_vec = _embed(query)
     results = []

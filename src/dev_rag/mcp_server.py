@@ -11,7 +11,7 @@ import sys
 import traceback
 
 from . import __version__
-from .searcher import search
+from .searcher import get_last_diagnostics, search
 
 TOOLS = [
     {
@@ -55,7 +55,12 @@ def _format_results(results: list, n_results: int) -> str:
     for i, r in enumerate(results[:n_results], 1):
         ctx = f' [{r["context"]}]' if r.get('context') else ''
         parts.append(
-            f'--- Result {i} (score={r["score"]:.3f}) ---\n'
+            # 4 знака, не 3: при спреде 0.0005 между top-1 и top-5 (типичный
+            # диапазон RRF в этом корпусе — 0.0159-0.0164) формат :.3f округлял
+            # все результаты к одному значению и создавал иллюзию плоских score
+            # и сломанного ранжирования. CLI (cli.py) уже печатает :.4f — здесь
+            # приводится в соответствие. См. plan 001, дефект 3.
+            f'--- Result {i} (score={r["score"]:.4f}) ---\n'
             f'File: {r["path"]}{ctx}\n\n'
             f'{r["text"]}'
         )
@@ -65,7 +70,18 @@ def _format_results(results: list, n_results: int) -> str:
 def rag_search(query: str, collection: str = 'all', n_results: int = 5) -> str:
     """Выполнить поиск через роутер (zvec или qdrant)."""
     results = search(query, collection=collection, n=n_results)
-    return _format_results(results, n_results)
+    body = _format_results(results, n_results)
+    # Дефект 2 («лучший» вариант): если часть категорий не открылась
+    # (эксклюзивный lock, битый индекс), search() молча их пропускает, и
+    # результат неотличим от пустого корпуса — тихий отказ. Причина уходила
+    # только в stderr, которого MCP-клиент не видит. Выносим её в тело ответа,
+    # чтобы ассистент понимал: пусто из-за недоступного индекса, а не из-за
+    # отсутствия совпадений.
+    diagnostics = get_last_diagnostics()
+    if diagnostics:
+        note = '\n'.join(f'⚠ {d}' for d in diagnostics)
+        body = f'{body}\n\n--- Диагностика индекса ---\n{note}'
+    return body
 
 
 def handle(request: dict) -> dict | None:

@@ -12,8 +12,13 @@ from __future__ import annotations
 from .config import RAG_BACKEND
 
 if RAG_BACKEND == 'zvec':
-    from .zvec_searcher import search
+    from .zvec_searcher import search, get_last_diagnostics
 else:
     from .qdrant_searcher import search
 
-__all__ = ['search']
+    def get_last_diagnostics() -> list:
+        """qdrant-бэкенд не публикует диагностику открытия индекса —
+        возвращаем пусто, чтобы mcp_server оставался backend-agnostic."""
+        return []
+
+__all__ = ['search', 'get_last_diagnostics']
