@@ -30,9 +30,15 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
+    # Держать синхронно с матрицей в .github/workflows/ci.yml: здесь заявляется
+    # только то, что реально прогоняется. Из этого списка shields.io строит
+    # бейдж pyversions — забытая версия читается пользователем как «не
+    # поддерживается». 3.14 не заявлен намеренно: вилки zvec под cp314 есть,
+    # но CI его не гоняет, а обещать непроверенное мы уже пробовали.
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Documentation",
     "Topic :: Text Processing :: Indexing",
     "Natural Language :: Russian",
