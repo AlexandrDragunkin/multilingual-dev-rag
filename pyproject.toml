@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multilingual-dev-rag"
-version = "0.1.0rc1"
+version = "0.1.0"
 description = "Local-first multilingual RAG for code and technical docs. In-process hybrid retrieval (vector + full-text) with FTS for Cyrillic and other non-ASCII scripts."
 readme = "README.md"
 requires-python = ">=3.10"
