@@ -177,6 +177,20 @@ def test_greek_final_sigma(coll):
 
 
 @pytest.mark.integration
+def test_french_accents_found(coll):
+    """Французская диакритика находится, и регистр не важен: É и é сводятся
+    к одному токену.
+
+    README перечисляет французский среди проверенных сквозным зондом, но до
+    этого теста обещание держалось на unit-тесте нормализатора — то есть на
+    чистой функции, а не на движке. Ровно в движке и жили баги с не-ASCII.
+    """
+    _insert(coll, 'fr1', 'Poignée encastrée', make_fts_unicode('Poignée encastrée'))
+    assert _hit_ids(coll, 'text_fts', make_fts_unicode('poignée')) == {'fr1'}
+    assert _hit_ids(coll, 'text_fts', make_fts_unicode('POIGNÉE')) == {'fr1'}
+
+
+@pytest.mark.integration
 def test_arabic_found(coll):
     """Арабский (RTL, без пробелов внутри слова) находится."""
     _insert(coll, 'ar1', 'الباب', make_fts_unicode('الباب'))
