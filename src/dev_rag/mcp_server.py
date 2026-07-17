@@ -55,7 +55,12 @@ def _format_results(results: list, n_results: int) -> str:
     for i, r in enumerate(results[:n_results], 1):
         ctx = f' [{r["context"]}]' if r.get('context') else ''
         parts.append(
-            f'--- Result {i} (score={r["score"]:.3f}) ---\n'
+            # 4 знака, не 3: при спреде 0.0005 между top-1 и top-5 (типичный
+            # диапазон RRF в этом корпусе — 0.0159-0.0164) формат :.3f округлял
+            # все результаты к одному значению и создавал иллюзию плоских score
+            # и сломанного ранжирования. CLI (cli.py) уже печатает :.4f — здесь
+            # приводится в соответствие. См. plan 001, дефект 3.
+            f'--- Result {i} (score={r["score"]:.4f}) ---\n'
             f'File: {r["path"]}{ctx}\n\n'
             f'{r["text"]}'
         )

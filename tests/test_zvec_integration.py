@@ -220,6 +220,103 @@ def test_identifier_split_by_standard(coll):
 
 
 # =====================================================================
+# Read-only открытие коллекции (plan 001, дефект 1)
+# =====================================================================
+#
+# Поисковый путь должен открывать существующую коллекцию как read_only=True,
+# иначе клиенты поиска берут эксклюзивный RW-lock и второй процесс получает
+# «Can't lock read-write collection». Эти тесты фиксируют два свойства, на
+# которые опирается исправление в zvec_searcher._open_or_create_collection:
+#
+#   1. RO-хэндл отвечает на query() (FTS+вектор) — иначе поиск сломался бы.
+#   2. Два RO-хэндла сосуществуют одновременно — это сценарий «два MCP-клиента
+#      на одной машине» (plan 001, приёмка 4) и «клиент + CLI» (приёмка 3).
+#
+# ВАЖНО о границах zvec 0.5.1: RO-хэндл НЕ открывается рядом с удерживаемым
+# RW-хэндлом (проверено вручную на этой версии: «Can't lock read-only
+# collection»). То есть «искать, пока индексатор пишет» этим не покрывается —
+# но приёмка plan 001 этого и не требует: все её шаги стартуют из «никто не
+# держит коллекцию», а конфликтом был именно поиск-поиск, а не запись-поиск.
+# Запись оставлена RW в zvec_indexer._create_collection (read_only=False).
+
+@pytest.mark.integration
+def test_readonly_handle_answers_query(tmp_path):
+    """RO-хэндл отвечает на FTS-query так же, как RW: query() на read-only
+    коллекции работает. Без этого перевод поиска на read_only=True ломает
+    сам поиск (это и был риск, отмеченный в plan 001, таблица исполнения)."""
+    import gc
+    import shutil
+    import zvec
+
+    coll_path = str(tmp_path / "ro_probe")
+    rw = zvec.create_and_open(
+        path=coll_path,
+        schema=_build_schema("ro_probe"),
+        option=CollectionOption(read_only=False, enable_mmap=True),
+    )
+    try:
+        _insert(rw, 'en1', 'воркер RabbitMQ диспетчер',
+                make_fts_unicode('воркер RabbitMQ диспетчер'))
+    finally:
+        # RW-хэндл обязан уйти до RO-open (см. комментарий к блоку выше):
+        # в zvec 0.5.1 RO не делит LOCK с удерживаемым RW.
+        del rw
+        gc.collect()
+
+    try:
+        ro = zvec.open(
+            coll_path,
+            option=CollectionOption(read_only=True, enable_mmap=True),
+        )
+        try:
+            hits = _hit_ids(ro, 'text', 'RabbitMQ')
+            assert hits == {'en1'}, (
+                "read-only хэндл не ответил на FTS-query; план 001/дефект 1 "
+                f"опирается на то, что query() работает на RO-хэндле. hits={hits}"
+            )
+        finally:
+            del ro
+            gc.collect()
+    finally:
+        shutil.rmtree(coll_path, ignore_errors=True)
+
+
+@pytest.mark.integration
+def test_two_readonly_handles_coexist(tmp_path):
+    """Два RO-хэндла на одну коллекцию открыты одновременно и оба отвечают на
+    query() — это сценарий «два MCP-клиента / клиент + CLI» (plan 001,
+    приёмки 3-4). RO не берёт эксклюзивный LOCK, поэтому второй поиск не
+    получает «Can't lock ... collection»."""
+    import gc
+    import shutil
+    import zvec
+
+    coll_path = str(tmp_path / "ro_pair")
+    rw = zvec.create_and_open(
+        path=coll_path,
+        schema=_build_schema("ro_pair"),
+        option=CollectionOption(read_only=False, enable_mmap=True),
+    )
+    try:
+        _insert(rw, 'en1', 'воркер RabbitMQ диспетчер',
+                make_fts_unicode('воркер RabbitMQ диспетчер'))
+    finally:
+        del rw
+        gc.collect()
+
+    ro1 = ro2 = None
+    try:
+        ro1 = zvec.open(coll_path, option=CollectionOption(read_only=True, enable_mmap=True))
+        ro2 = zvec.open(coll_path, option=CollectionOption(read_only=True, enable_mmap=True))
+        assert _hit_ids(ro1, 'text', 'RabbitMQ') == {'en1'}
+        assert _hit_ids(ro2, 'text', 'RabbitMQ') == {'en1'}
+    finally:
+        del ro1, ro2
+        gc.collect()
+        shutil.rmtree(coll_path, ignore_errors=True)
+
+
+# =====================================================================
 # Негативный: фиксирует причину существования text_fts
 # =====================================================================
 
