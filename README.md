@@ -160,7 +160,8 @@ for r in search('усталость воркера', collection='docs', n=5):
 {
   "mcpServers": {
     "dev-rag": {
-      "command": "dev-rag-mcp",
+      "command": "python",
+      "args": ["-m", "dev_rag.mcp_server"],
       "env": {
         "DEV_RAG_ROOT": "/absolute/path/to/your/repo",
         "DEV_RAG_PROFILE": "generic"
@@ -170,7 +171,31 @@ for r in search('усталость воркера', collection='docs', n=5):
 }
 ```
 
+`command: "dev-rag-mcp"` works too, and on Linux and macOS the two are equivalent. On Windows, prefer `python -m` — see below.
+
 MCP servers are child processes of the client, not daemons: `env` is read once at startup. After editing the config, restart the client.
+
+#### Upgrading on Windows: `WinError 32`
+
+`dev-rag-mcp` is an `.exe` launcher. While the MCP server is running, Windows holds a lock on it, and pip cannot replace it:
+
+```text
+ERROR: Could not install packages due to an OSError: [WinError 32]
+The process cannot access the file because it is being used by another process:
+'...\Scripts\dev-rag-mcp.exe'
+```
+
+Two things about this are worth knowing, because neither is obvious from the message:
+
+- **The upgrade mostly went through anyway.** Rebuilding the launcher is the last step, so pip has already removed the old version and written the new module, metadata and other scripts. The command exits non-zero while the package is, in fact, upgraded. Verify rather than guess: `python -c "import dev_rag; print(dev_rag.__version__)"`.
+- **Renaming the locked `.exe` does not help.** A running image cannot be renamed either — that attempt fails with the same error.
+
+Ways out, in order of preference:
+
+1. **Launch via `python -m dev_rag.mcp_server`** (as above). Then the lock lands on `python.exe`, which pip never replaces, and `.py` files are not held open at all — upgrades just work, with the client still running.
+2. Close the MCP client (editor/IDE), upgrade, reopen.
+
+This is not specific to this package: it applies to any console script whose process outlives the upgrade.
 
 ## Profiles
 
