@@ -7,10 +7,19 @@
 Set `DEV_RAG_ROOT` to the repository you want to index, and `DEV_RAG_PROFILE`
 to a profile describing which files count. See `dev_rag.config`.
 """
+from importlib.metadata import PackageNotFoundError, version as _version
+
 from .config import DEV_RAG_PROFILE, DEV_RAG_ROOT, RAG_BACKEND
 from .searcher import search
 
-__version__ = '0.1.0'
+try:
+    # Источник правды — git-тег: setuptools-scm кладёт номер в метаданные при
+    # сборке, отсюда мы его только читаем. Своей копии номера в коде нет.
+    __version__ = _version('multilingual-dev-rag')
+except PackageNotFoundError:
+    # Пакет не установлен — импорт прямо из исходников (src на PYTHONPATH).
+    # Метаданных нет, и взять номер неоткуда: в дереве его никто не хранит.
+    __version__ = 'unknown'
 
 __all__ = [
     'search',

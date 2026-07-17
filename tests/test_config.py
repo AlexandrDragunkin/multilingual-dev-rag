@@ -14,24 +14,49 @@ def test_import_search():
     assert callable(search)
 
 
-def test_version_matches_pyproject():
-    """__version__ и version в pyproject не должны разъезжаться.
+def _installed_version():
+    """Версия из метаданных, или None если пакет не установлен."""
+    from importlib.metadata import PackageNotFoundError, version
+    try:
+        return version('multilingual-dev-rag')
+    except PackageNotFoundError:
+        return None
 
-    Номер живёт в двух местах, и рассинхрон ничем себя не проявит: пакет
-    соберётся, установится и будет врать о своей версии. На PyPI номер
-    переиспользовать нельзя, так что ошибка здесь не откатывается.
+
+def test_version_resolved_from_metadata():
+    """__version__ разрешается в настоящий номер, а не в 'unknown'.
+
+    Номер приходит из git-тега через setuptools-scm и живёт только в
+    метаданных. Своей копии в коде больше нет, так что разъезжаться нечему —
+    но появился новый способ соврать тихо: если имя в
+    importlib.metadata.version() разойдётся с name в pyproject (переименование,
+    опечатка), сработает fallback и __version__ молча станет 'unknown'.
+    Исключения при этом не будет — только неверный ответ.
     """
-    import pathlib
-    import re
-
     import dev_rag
 
-    pyproject = pathlib.Path(__file__).parent.parent / 'pyproject.toml'
-    if not pyproject.is_file():          # установлен из wheel, исходников нет
-        pytest.skip('pyproject.toml not available (installed package)')
-    m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(encoding='utf-8'), re.M)
-    assert m, 'version not found in pyproject.toml'
-    assert dev_rag.__version__ == m.group(1)
+    if _installed_version() is None:
+        pytest.skip('пакет не установлен — версию брать неоткуда')
+
+    assert dev_rag.__version__, '__version__ пустой'
+    assert dev_rag.__version__ != 'unknown', (
+        'пакет установлен, а __version__ свалился в fallback — вероятно, '
+        'имя в importlib.metadata.version() разошлось с name в pyproject'
+    )
+
+
+def test_mcp_serverinfo_reports_package_version():
+    """MCP-хендшейк отдаёт версию пакета, а не зашитую строку.
+
+    До перехода на setuptools-scm здесь лежал литерал '0.1.0' — третья копия
+    номера, которую не стерёг ни тест, ни CI. Клиент MCP видел бы её как
+    версию сервера ещё долго после релиза 0.2.0.
+    """
+    import dev_rag
+    from dev_rag.mcp_server import handle
+
+    resp = handle({'method': 'initialize', 'params': {}})
+    assert resp['result']['serverInfo']['version'] == dev_rag.__version__
 
 
 def test_config_defaults():

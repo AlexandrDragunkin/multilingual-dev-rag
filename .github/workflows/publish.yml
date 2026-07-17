@@ -10,9 +10,9 @@ name: publish
 #   Workflow name:      publish.yml
 #   Environment name:   pypi
 #
-# Публикация — по тегу. Номер версии берётся из pyproject.toml, а не из тега:
-# тег лишь запускает процесс. Следите, чтобы они совпадали — job ниже это
-# проверяет и падает при расхождении.
+# Публикация — по тегу, и тег И ЕСТЬ версия: setuptools-scm читает его из git
+# (v0.1.0 -> 0.1.0). Сверять тег с pyproject больше не нужно — номера в
+# pyproject нет, расходиться нечему.
 
 on:
   push:
@@ -24,6 +24,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Страховка, а не необходимость — проверено имитацией checkout@v4:
+          # при пуше тега он фетчит сам тег (refspec +refs/tags/v*:refs/tags/v*)
+          # и чекаутит его, так что даже в shallow-клоне git describe находит
+          # тег на HEAD и версия собирается верной. Держим fetch-depth: 0 ради
+          # workflow_dispatch (запуск с ветки, где тега на HEAD нет) и чтобы не
+          # зависеть от внутренних деталей checkout. Настоящий заслон — шаг
+          # сверки собранной версии с тегом ниже.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -51,17 +60,20 @@ jobs:
       - name: Check metadata
         run: python -m twine check dist/*
 
-      - name: Tag must match the version in pyproject
-        # Иначе легко выпустить 0.1.0 под тегом v0.2.0 и потом гадать, что
-        # именно лежит на PyPI. Номер версии на PyPI не переиспользуется —
-        # ошибка здесь не откатывается, только новым номером.
+      - name: Built version must be exactly the tag
+        # Не сверка тега с pyproject (её сняли вместе с номером в pyproject) —
+        # проверка, что setuptools-scm вообще УВИДЕЛ тег. Без тегов в клоне он
+        # не падает, а выдаёт 0.1.1.dev1+g<hash>. PyPI такой артефакт отвергнет
+        # из-за локальной части (+g...), но уже на последнем шаге и с
+        # сообщением про PEP 440, из которого причину не видно. Здесь отказ
+        # приходит сразу после сборки и называет причину.
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
-          PKG=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
-          echo "tag=$TAG  pyproject=$PKG"
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::Tag v$TAG does not match pyproject version $PKG"
+          BUILT=$(ls dist/*.tar.gz | sed -E 's|.*/multilingual_dev_rag-(.*)\.tar\.gz|\1|')
+          echo "tag=$TAG  built=$BUILT"
+          if [ "$TAG" != "$BUILT" ]; then
+            echo "::error::Built version $BUILT != tag $TAG — setuptools-scm did not see the tag (fetch-depth: 0 missing?)"
             exit 1
           fi
 

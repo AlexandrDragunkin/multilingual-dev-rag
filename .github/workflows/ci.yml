@@ -27,6 +27,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Здесь checkout идёт по ветке, тегов в shallow-клоне нет, и
+          # setuptools-scm вырождает версию в 0.1.dev1+g<hash> — номер, не
+          # связанный ни с одним релизом (проверено: сборка в таком клоне даёт
+          # ровно это, отделываясь UserWarning про shallow). Тесты от этого не
+          # краснеют, так что заметить нечем — потому и прописано явно.
+          fetch-depth: 0
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5

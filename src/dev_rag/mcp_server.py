@@ -10,6 +10,7 @@ import json
 import sys
 import traceback
 
+from . import __version__
 from .searcher import search
 
 TOOLS = [
@@ -76,7 +77,7 @@ def handle(request: dict) -> dict | None:
             'result': {
                 'protocolVersion': '2024-11-05',
                 'capabilities': {'tools': {}},
-                'serverInfo': {'name': 'multilingual-dev-rag', 'version': '0.1.0'},
+                'serverInfo': {'name': 'multilingual-dev-rag', 'version': __version__},
             }
         }
 

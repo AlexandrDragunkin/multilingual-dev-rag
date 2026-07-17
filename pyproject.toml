@@ -3,12 +3,12 @@
 # [project] — это PEP 639, и до 77 setuptools их не понимает. С build-isolation
 # pip ставит свежий setuptools и всё собирается, поэтому расхождение не видно;
 # сборка с --no-build-isolation на setuptools 64-76 упала бы на метаданных.
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "multilingual-dev-rag"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Local-first multilingual RAG for code and technical docs. In-process hybrid retrieval (vector + full-text) with FTS for Cyrillic and other non-ASCII scripts."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -71,6 +71,20 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 dev_rag = ["profiles/*.json"]
+
+[tool.setuptools_scm]
+# Версия берётся из git-тега (v0.1.0 -> 0.1.0). Раньше номер жил в трёх местах
+# — здесь, в src/dev_rag/__init__.py и в serverInfo у mcp_server — и разъезжался:
+# pip показывал 0.1.0, а dev_rag.__version__ — 0.1.0rc1, потому что dist-info не
+# пересоздали после бампа. Теперь источник правды один, и сверять нечего.
+#
+# Тегов в клоне нет -> версия молча вырождается: сборка в клоне без тегов даёт
+# 0.1.dev1+g<hash> (проверено), отделываясь UserWarning про shallow. Не падает,
+# просто отвечает неверно. Отсюда `fetch-depth: 0` в обоих workflow.
+#
+# fallback_version намеренно не задан: он бы превратил это тихое расхождение в
+# ещё более тихое. Сборка не из git-дерева (например, из ZIP с GitHub) упадёт —
+# и это правильный ответ. Сборка из sdist работает: номер уже зашит в PKG-INFO.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
