@@ -47,7 +47,14 @@ classifiers = [
 
 dependencies = [
     # zvec backend — in-process, no servers. 64-bit Python only.
-    "zvec>=0.5.1",
+    # Верхняя граница <0.6 намеренная: zvec 0.6.0 сменил токенайзер `standard`
+    # (стал матчить кириллицу на Win/Linux и перестал резать идентификаторы вроде
+    # obj_k3_gab3 по подчёркиванию). Это ломает канареечные тесты
+    # test_standard_cyrillic_behavior_matches_platform и
+    # test_identifier_split_by_standard и меняет recall поиска. Пока переход на
+    # 0.6.0 не оценён (нужен пересбор индекса, возможно уходит поле text_fts) —
+    # держим известно-рабочую 0.5.x. См. plan 002.
+    "zvec>=0.5.1,<0.6",
     "sentence-transformers>=2.0",
 ]
 
