@@ -279,4 +279,24 @@ def cleanup_orphan_siblings() -> int:
         _log.info(
             'process_guard: убрано %d старых инстансов dev_rag.mcp_server', killed
         )
+    # Файловый лог через DEV_RAG_PROCESS_GUARD_LOG: MCP-клиенты (ZCode, Claude
+    # Code) не показывают stderr сервера, поэтому _log.* невидим. Без файла
+    # невозможно отличить «уборка не понадобилась» от «уборка сломалась» —
+    # тот же класс тихого отказа, с которым борется весь модуль. Env-gated,
+    # чтобы не плодить файлы в проде без необходимости; в ARLINE включено для
+    # диагностики plan 003.
+    log_path = os.environ.get('DEV_RAG_PROCESS_GUARD_LOG')
+    if log_path:
+        try:
+            import time
+            with open(log_path, 'a', encoding='utf-8') as f:
+                t = time.strftime('%Y-%m-%d %H:%M:%S')
+                victims_str = ', '.join(f'pid={v.pid}(owner={v.owner})' for v in victims) or 'none'
+                f.write(
+                    f'{t} my_pid={my_pid} marked={len(raw_snapshot)} '
+                    f'real_candidates={len(snapshot)} killed={killed} victims=[{victims_str}]\n'
+                )
+        except OSError:
+            # Лог недоступен (нет прав, диск полный) — не ронять сервер.
+            pass
     return killed

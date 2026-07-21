@@ -219,3 +219,38 @@ def test_import_error_is_explicit_warning(monkeypatch, caplog):
     assert killed == 0
     assert any('psutil' in rec.message and 'уборка' in rec.message.lower()
                for rec in caplog.records), [rec.message for rec in caplog.records]
+
+
+def test_file_log_written_when_env_set(monkeypatch, tmp_path):
+    # DEV_RAG_PROCESS_GUARD_LOG задан → cleanup пишет строку с my_pid/killed/
+    # victims. MCP-клиенты не показывают stderr, поэтому без файла невозможно
+    # отличить «уборка не понадобилась» от «уборка сломалась».
+    log_file = tmp_path / 'guard.log'
+    monkeypatch.setenv('DEV_RAG_PROCESS_GUARD_LOG', str(log_file))
+
+    # Подменяем select_victims пустым списком, чтобы не зависеть от ОС.
+    import dev_rag.process_guard as pg
+    monkeypatch.setattr(pg, 'select_victims', lambda *a, **k: [])
+
+    from dev_rag.process_guard import cleanup_orphan_siblings
+
+    killed = cleanup_orphan_siblings()
+    assert killed == 0
+    assert log_file.exists()
+    content = log_file.read_text(encoding='utf-8')
+    assert 'my_pid=' in content
+    assert 'killed=0' in content
+    assert 'victims=[none]' in content
+
+
+def test_file_log_skipped_when_env_unset(monkeypatch, tmp_path):
+    # Без DEV_RAG_PROCESS_GUARD_LOG файл не создаётся — прод не замусоривается.
+    monkeypatch.delenv('DEV_RAG_PROCESS_GUARD_LOG', raising=False)
+    import dev_rag.process_guard as pg
+    monkeypatch.setattr(pg, 'select_victims', lambda *a, **k: [])
+
+    from dev_rag.process_guard import cleanup_orphan_siblings
+
+    cleanup_orphan_siblings()
+    # Файл не должен создаваться. Проверяем по отсутствию новых файлов в tmp.
+    assert list(tmp_path.iterdir()) == []
