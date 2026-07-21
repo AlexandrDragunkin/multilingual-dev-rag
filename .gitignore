@@ -34,3 +34,8 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# process_guard live diagnostics (DEV_RAG_PROCESS_GUARD_LOG target) and
+# process-watcher scratch logs — runtime artifacts, not source.
+scripts/guard.log
+scripts/rag_proc_watch.log
