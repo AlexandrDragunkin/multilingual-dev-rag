@@ -214,8 +214,18 @@ def select_victims(
         groups.setdefault(find(i), []).append(non_orphans[i])
 
     # 5. В каждой группе выживает самый свежий, self всегда выживает.
+    #    Группы, где self НЕ состоит, пропускаем ЦЕЛИКОМ: это чужой клиент
+    #    (multi-client план 001). Свежий инстанс одного клиента не должен
+    #    расчищать дубли другого — это дело того клиента при его собственном
+    #    старте. Баг «глобальная уборка» выявлен dry-run 2026-07-21: ZCode
+    #    pid=34940 (свежий) убивал два VSCode-инстанса, с которыми не имел
+    #    общих предков. Группировка корректно разнесла клиентов по разным
+    #    группам, но шаг newest-wins применялся ко всем size>1 без проверки
+    #    принадлежности self.
     for group in groups.values():
         if len(group) <= 1:
+            continue
+        if not any(p.pid == my_pid for p in group):
             continue
         newest = max(group, key=lambda p: p.create_time)
         for p in group:

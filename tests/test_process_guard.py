@@ -166,6 +166,26 @@ def test_windows_stub_topology_groups_by_common_ancestor():
     assert [v.pid for v in victims] == [100, 300]
 
 
+def test_self_does_not_kill_duplicates_in_other_clients_group():
+    # РЕГРЕССИЯ бага «глобальная уборка»: self под ZCode (предок 7812), а в
+    # чужом клиенте Claude (предок 9999) — ДВА инстанса-дубля. Multi-client
+    # граница plan 001 требует: ZCode НЕ должен убирать чужие дубли — это
+    # дело свежего Claude-инстанса при его старте. Без этого условия новый
+    # инстанс одного клиента расчищал бы дубли вообще всех клиентов на
+    # машине. Найдено dry-run 2026-07-21: ZCode pid=34940 (свежий) убивал
+    # два VSCode-инстанса, с которыми не имел общих предков.
+    procs = [
+        _proc(100, ancestors={9999}, t=10),   # Claude, старый дубль
+        _proc(200, ancestors={9999}, t=20),   # Claude, свежий дубль
+        _proc(300, ancestors={7812}, t=30),   # == my_pid, ZCode
+    ]
+    victims = select_victims(
+        procs, my_pid=300, pid_alive=_live_set({9999, 7812}),
+        is_ancestor_of_mine=_no_ancestors,
+    )
+    assert victims == []
+
+
 def test_transitive_grouping_three_instances_one_client():
     # Транзитивность: A~B (общий X), B~C (общий Y), A и C общих предков не
     # имеют. Все трое должны попасть в одну группу через B. Свежий выживает,
