@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 import traceback
 
 from . import __version__
 from .searcher import get_last_diagnostics, search
+
+_log = logging.getLogger(__name__)
 
 TOOLS = [
     {
@@ -123,6 +126,22 @@ def handle(request: dict) -> dict | None:
 
 def main():
     """Точка входа MCP-сервера (stdio transport)."""
+    # Автоуборка дубликатов: ZCode при переподключении поднимает новый
+    # MCP-инстанс, не гася старые — копятся висящие копии (замерено: 6
+    # инстансов RAG за день, все с живым родителем). Убрать свои старые
+    # копии ДО настройки stdin и загрузки модели, чтобы не множить
+    # потребление памяти. См. dev_rag.process_guard.
+    #
+    # Обёрнуто в try/except намеренно: уборка — best-effort, поиск важнее.
+    # Любой сбой (нет psutil, нет прав, OOM) не должен ронять сервер.
+    # Внутри process_guard ImportError от psutil обработан отдельно и
+    # логируется явно — здесь ловим только неожиданные исключения.
+    try:
+        from .process_guard import cleanup_orphan_siblings
+        cleanup_orphan_siblings()
+    except Exception as e:  # noqa: BLE001 — сервер не должен падать на уборке
+        _log.warning('process_guard: уборка пропущена: %s', e)
+
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stdin.reconfigure(encoding='utf-8')
     for line in sys.stdin:

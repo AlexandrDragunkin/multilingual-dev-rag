@@ -46,6 +46,15 @@ classifiers = [
 ]
 
 dependencies = [
+    # process_guard: автоуборка процессов-дубликатов dev_rag.mcp_server при
+    # старте нового инстанса. psutil кросс-платформенный, wheels есть под все
+    # ОС из CI-матрицы (ubuntu/windows/macos × py3.10-3.13). Альтернативы
+    # (PowerShell/wmic шелл-ауты) — Windows-only и непроверяемы юнит-тестами;
+    # optional-extra создал бы тот самый «тихий отказ» (в чистой установке
+    # защита молча не работала бы), с которым проект борется. >=5.9 — нижняя
+    # граница со стабильным API Process.cmdline()/create_time()/parents().
+    # См. plan 003 и src/dev_rag/process_guard.py.
+    "psutil>=5.9",
     # zvec backend — in-process, no servers. 64-bit Python only.
     # Верхняя граница <0.6 намеренная: zvec 0.6.0 сменил токенайзер `standard`
     # (стал матчить кириллицу на Win/Linux и перестал резать идентификаторы вроде
