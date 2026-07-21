@@ -254,10 +254,56 @@ entry-point'ы (`main`, `cleanup_orphan_siblings`, `select_victims`) callable.
 Эта запись — от **промежуточной версии** кода (до исправления бага 3):
 защита видела 5 real, но не убирала дубль (Claude под VSCode). После
 переработки логика бы убрала старого Claude. Финальный лог с killed>0
-пока не получен: для него нужен старт нового RAG после полного Quit ZCode
-(ZCode кэширует `.mcp.json`, reconnect не перечитывает env).
+пока не получен.
+
+#### 6c-1. Почему env-лог не пишется после полного Quit ZCode (найдено 2026-07-21)
+
+После полного Quit ZCode и рестарта (2026-07-21 10:10) запустился новый
+MCP-инстанс под workspace ARLINE (pid 29208 → stub 36644 → real 49104).
+Лог `guard.log` **не обновился**. Причина — **ZCode не прокидывает
+`DEV_RAG_PROCESS_GUARD_LOG` в env запускаемого MCP-сервера**, несмотря на
+корректную запись в `.mcp.json` (валидный JSON, ASCII, без скрытых
+символов — проверено побайтово). Прямая проверка env процесса 49104:
+
+| Переменная | Declared в .mcp.json | Actual в pid=49104 |
+|---|---|---|
+| `RAG_BACKEND` | `zvec` | `zvec` ✓ |
+| `DEV_RAG_ROOT` | `C:/REPO/ARLINE` | `C:/REPO/ARLINE` ✓ |
+| `DEV_RAG_PROFILE` | `k3_mebel` | `k3_mebel` ✓ |
+| `HF_HUB_OFFLINE` | `1` | `1` ✓ |
+| **`DEV_RAG_PROCESS_GUARD_LOG`** | `C:/REPO/multilingual-dev-rag/scripts/guard.log` | **MISSING** |
+
+4 из 5 переменных дошли, пятая — нет. Отличие потерянной переменной: самое
+длинное значение (47 символов vs 3–17) и путь к файлу. Подозрение — ZCode
+квотирует/обрезает длинные env-значения или фильтрует по нераскрытому
+правилу. **Это внешний по отношению к нашему коду дефект** (handoff 7:
+«Чинить ZCode — не контролируем»). Сам `process_guard` отработал корректно
+— просто тихо, как и задумано без env.
+
+**Дополнительный нюанс:** после Quit ZCode поднял новый MCP-инстанс от
+workspace ARLINE, не от `multilingual-dev-rag` (хотя открыт второй). Снимок
+процессов в этот момент: 4 real-инстанса под 2 GUI-клиентами (ZCode,
+VSCode). `select_victims` от лица свежего ZCode корректно даёт **0 жертв**
+— это multi-client сценарий plan 001: VSCode-дубли — дело свежего
+VSCode-инстанса, не ZCode (см. фикс бага 5, раздел 2b).
+
+#### 6c-2. Обходные пути (если доказательный лог всё же нужен)
+
+1. **Положить путь в `DEV_RAG_ROOT`-подобную переменную**, которая точно
+   прокидывается (но загрязняет семантику существующих переменных).
+2. **Захардкодить в `process_guard.py`** путь относительно `__file__`
+   (модуль знает свой репо). Минус — лог всегда пишется, не env-gated.
+3. **Ждать фикса ZCode** по корректному прокидыванию env из `.mcp.json`.
+   Зарепортить в трекер ZCode (вне scope этого репо).
+4. **Запускать MCP-сервер вручную из терминала** с явным env для разовой
+   проверочной сессии — обходит ZCode-стек полностью.
 
 ### 6d. Ручная (на авторе, при желании)
+
+> ⚠️ **Обновлено 2026-07-21:** шаг ниже был выполнен (полный Quit ZCode),
+> но `guard.log` не обновился, потому что ZCode не прокидывает
+> `DEV_RAG_PROCESS_GUARD_LOG` в env MCP-сервера (см. 6c-1). Инструкция
+> сохранена для будущего, когда/если ZCode починят.
 
 Чтобы получить доказательный `guard.log` с killed>0:
 1. Удостовериться, что `DEV_RAG_PROCESS_GUARD_LOG` прописан в
@@ -265,6 +311,17 @@ entry-point'ы (`main`, `cleanup_orphan_siblings`, `select_victims`) callable.
 2. Полный Quit ZCode из трея (не крестик — в трей).
 3. Открыть ZCode с workspace `C:\REPO\ARLINE`, вызвать RAG-поиск.
 4. Прочитать `scripts/guard.log` — будет `killed=N victims=[pid=...]`.
+
+**Альтернатива без зависимости от ZCode:** запустить MCP-сервер вручную
+из терминала с явным env:
+```bash
+DEV_RAG_PROCESS_GUARD_LOG=C:/REPO/multilingual-dev-rag/scripts/guard.log \
+DEV_RAG_ROOT=C:/REPO/ARLINE RAG_BACKEND=zvec \
+  C:/venv310-64/Scripts/python.exe -m dev_rag.mcp_server < /dev/null
+```
+Это обходит ZCode-стек и точно проставит env. Лог запишется. Но для
+получения killed>0 нужно, чтобы к моменту запуска в живых был дубль того
+же клиента (multi-client не считается).
 
 Если killed=0 victims=[none] при живых дублях — баг в ОС-части
 (`cleanup_orphan_siblings`: сбор ancestors через `parents()`,
